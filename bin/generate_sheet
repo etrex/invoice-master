@@ -1,0 +1,26 @@
+#!/usr/bin/env ruby
+
+require 'bundler/setup'
+require 'invoice_master'
+
+if ARGV.length < 2
+  puts "Usage: #{$PROGRAM_NAME} <json_folder> <output_xlsx>"
+  exit 1
+end
+
+json_folder = ARGV[0]
+output_file = ARGV[1]
+
+unless Dir.exist?(json_folder)
+  puts "Error: Folder '#{json_folder}' not found"
+  exit 1
+end
+
+begin
+  exporter = InvoiceMaster::SheetExport.new
+  exporter.generate(json_folder, output_file)
+  puts "Successfully generated sheet at #{output_file}"
+rescue InvoiceMaster::Error => e
+  puts "Error: #{e.message}"
+  exit 1
+end

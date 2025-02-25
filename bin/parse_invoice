@@ -1,0 +1,27 @@
+#!/usr/bin/env ruby
+
+require 'bundler/setup'
+require 'invoice_master'
+
+if ARGV.empty?
+  puts "Usage: #{$PROGRAM_NAME} <image_file>"
+  exit 1
+end
+
+image_path = ARGV[0]
+unless File.exist?(image_path)
+  puts "Error: File '#{image_path}' not found"
+  exit 1
+end
+
+begin
+  parser = InvoiceMaster::Parser.new
+  json_data = parser.parse(image_path)
+  
+  output_path = image_path.sub(/\.[^.]+$/, '.json')
+  File.write(output_path, JSON.pretty_generate(json_data))
+  puts "Successfully parsed invoice and saved to #{output_path}"
+rescue InvoiceMaster::Error => e
+  puts "Error: #{e.message}"
+  exit 1
+end
