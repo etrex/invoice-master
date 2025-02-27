@@ -1,0 +1,4 @@
+example_id                                       | status | run_time      |
+------------------------------------------------ | ------ | ------------- |
+./spec/integration/invoice_parser_spec.rb[1:1:1] | failed | 48.27 seconds |
+./spec/integration/invoice_parser_spec.rb[1:2:1] | failed | 1.8 seconds   |

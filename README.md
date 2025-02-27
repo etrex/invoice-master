@@ -1,14 +1,14 @@
 # Invoice Master
 
-台灣電子發票自動解析工具 (Taiwan E-invoice Parser and Management Tool)
+發票自動解析工具 (invoice Parser and Management Tool)
 
 ## 專案簡介
 
-Invoice Master 是一個專門為台灣電子發票設計的自動化解析和管理工具。透過 AI 技術（LLM）自動解析發票圖片內容，並將其轉換為結構化的 JSON 資料，最終可匯出為易於查看的試算表格式。
+Invoice Master 是一個專門為發票設計的自動化解析和管理工具。透過 AI 技術（LLM）自動解析發票圖片內容，並將其轉換為結構化的 JSON 資料，最終可匯出為易於查看的試算表格式。
 
 ## 主要功能
 
-- 📸 發票圖片解析：自動讀取發票圖檔
+- 📸 發票圖片解析：自動讀取發票圖檔（支援 HEIC 格式）
 - 🤖 AI 智能辨識：使用 LLM 進行發票內容解析
 - 📊 JSON 結構化：將發票資訊轉換為標準化的 JSON 格式
 - 📑 批次處理：支援多張發票圖片批次處理
@@ -18,6 +18,11 @@ Invoice Master 是一個專門為台灣電子發票設計的自動化解析和�
 
 - Ruby 3.0+
 - Bundler
+- libheif（用於處理 HEIC 格式圖片）
+  ```bash
+  # macOS
+  brew install libheif
+  ```
 - 其他依賴套件將列在 Gemfile 中
 
 ## 專案結構

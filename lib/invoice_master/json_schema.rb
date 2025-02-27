@@ -1,3 +1,5 @@
+require 'json-schema'
+
 module InvoiceMaster
   module JsonSchema
     INVOICE_SCHEMA = {
@@ -25,18 +27,18 @@ module InvoiceMaster
         },
         "seller": {
           "type": "object",
-          "required": ["name", "tax_id"],
+          "required": ["name"],  
           "properties": {
             "name": {
               "type": "string",
               "description": "店家名稱"
             },
             "tax_id": {
-              "type": "string",
+              "type": ["string", "null"],  
               "description": "統一編號"
             },
             "address": {
-              "type": "string",
+              "type": ["string", "null"],  
               "description": "店家地址"
             }
           }
@@ -45,32 +47,37 @@ module InvoiceMaster
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["name", "quantity", "unit_price", "amount"],
+            "required": ["name"],  
             "properties": {
               "name": {
                 "type": "string",
                 "description": "品項名稱"
               },
               "quantity": {
-                "type": "number",
+                "type": ["number", "null"],  
                 "description": "數量"
               },
               "unit_price": {
-                "type": "number",
+                "type": ["number", "null"],  
                 "description": "單價"
               },
               "amount": {
-                "type": "number",
+                "type": ["number", "null"],  
                 "description": "小計"
               }
             }
           }
         }
       }
-    }
+    }.freeze
 
     def self.validate(json_data)
-      JSON::Validator.validate!(INVOICE_SCHEMA, json_data)
+      errors = JSON::Validator.fully_validate(INVOICE_SCHEMA, json_data)
+      if errors.empty?
+        true
+      else
+        raise Error, "JSON validation failed: #{errors.join(', ')}"
+      end
     end
   end
 end

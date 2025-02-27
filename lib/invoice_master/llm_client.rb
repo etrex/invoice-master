@@ -4,39 +4,18 @@ require 'json'
 module InvoiceMaster
   class LlmClient
     SYSTEM_PROMPT = <<~PROMPT
-      你是一個專業的發票辨識助手。請仔細閱讀發票圖片的文字內容，並將其轉換為結構化的 JSON 資料。
-      請注意以下幾點：
-      1. 發票號碼通常為8碼
-      2. 日期格式需要轉換為 YYYY-MM-DD
-      3. 金額必須為數字，不要包含逗號或元字
-      4. 品項要正確區分品名、數量、單價和小計
-      5. 如果發票上的文字無法辨識，請回傳 null
-      
-      請依照以下 JSON 格式回傳：
-      {
-        "invoice_number": "AB123456",
-        "date": "2024-02-26",
-        "total_amount": 100,
-        "seller": {
-          "name": "商店名稱",
-          "tax_id": "12345678",
-          "address": "店家地址"
-        },
-        "items": [
-          {
-            "name": "商品名稱",
-            "quantity": 1,
-            "unit_price": 50,
-            "amount": 50
-          }
-        ]
-      }
+      把所有的字寫下來，寫成詳細的 json 格式輸出。
+      請注意：
+      1. 所有數字必須轉換為符合 JSON 規範 (RFC 8259)：
+         - 使用純數字，不使用千位分隔符（例如：4000 而不是 4_000 或 4,000）
+         - 金額使用小數點，不使用逗號（例如：1234.56）
+      2. 確保輸出是合法的 JSON 格式
     PROMPT
 
     def initialize
       @api_key = ENV.fetch('OPENAI_API_KEY') { raise Error, 'Missing OPENAI_API_KEY environment variable' }
       @api_endpoint = ENV.fetch('OPENAI_API_ENDPOINT', 'https://api.openai.com/v1/chat/completions')
-      @model = ENV.fetch('OPENAI_MODEL', 'gpt-4-vision-preview')
+      @model = ENV.fetch('OPENAI_MODEL', 'gpt-4o-mini')
     end
 
     def extract_invoice_data(image_content)
@@ -48,6 +27,7 @@ module InvoiceMaster
         },
         body: {
           model: @model,
+          temperature: 0,
           messages: [
             {
               role: 'system',
@@ -57,24 +37,26 @@ module InvoiceMaster
               role: 'user',
               content: [
                 {
-                  type: 'image',
+                  type: 'image_url',
                   image_url: {
                     url: "data:image/jpeg;base64,#{image_content}"
                   }
                 }
               ]
             }
-          ],
-          max_tokens: 1000
+          ]
         }.to_json
       )
 
       raise Error, "API request failed: #{response['error']['message']}" if response['error']
 
       begin
-        JSON.parse(response['choices'][0]['message']['content'])
+        content = response['choices'][0]['message']['content']
+        # 移除可能的 markdown 標記
+        content = content.gsub(/```json\n/, '').gsub(/```/, '')
+        JSON.parse(content)
       rescue JSON::ParserError => e
-        raise Error, "Failed to parse LLM response: #{e.message}"
+        raise Error, "Failed to parse LLM response: #{e.message}\nResponse content: #{content}"
       end
     end
   end

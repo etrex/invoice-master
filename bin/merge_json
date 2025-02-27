@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# 檢查是否提供了目錄參數
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 <directory>"
+    exit 1
+fi
+
+directory="$1"
+output_file="$directory/all.txt"
+
+# 清空或創建輸出檔案
+> "$output_file"
+
+# 找出所有的 .json 檔案並按照檔名排序
+find "$directory" -name "*.json" -type f | sort | while read -r file; do
+    # 輸出檔案內容
+    cat "$file" >> "$output_file"
+    # 加入分隔符
+    echo -e "\n--\n" >> "$output_file"
+done
+
+echo "合併完成：$output_file"

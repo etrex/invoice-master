@@ -1,0 +1,87 @@
+#!/usr/bin/env ruby
+
+require 'bundler/setup'
+require 'optparse'
+require 'fileutils'
+$LOAD_PATH.unshift(File.expand_path('../lib', __dir__))
+require 'invoice_master'
+
+options = {
+  debug: true,
+  extensions: %w[jpg jpeg png heic]
+}
+
+# 解析命令列參數
+OptionParser.new do |opts|
+  opts.banner = "Usage: #{$PROGRAM_NAME} [options] <folder_path>"
+
+  opts.on("-d", "--debug", "Enable debug mode") do |d|
+    options[:debug] = d
+  end
+
+  opts.on("-e", "--extensions x,y,z", Array, "Image extensions to process (default: jpg,jpeg,png,heic)") do |exts|
+    options[:extensions] = exts
+  end
+
+  opts.on("-h", "--help", "Show this help message") do
+    puts opts
+    exit
+  end
+end.parse!
+
+if ARGV.empty?
+  puts "Error: Please provide a folder path"
+  exit 1
+end
+
+folder_path = ARGV[0]
+unless File.directory?(folder_path)
+  puts "Error: '#{folder_path}' is not a directory"
+  exit 1
+end
+
+# 取得所有符合副檔名的圖檔
+image_files = Dir.glob(File.join(folder_path, "**", "*.{#{options[:extensions].join(',')}}"))
+
+if image_files.empty?
+  puts "No image files found in '#{folder_path}' with extensions: #{options[:extensions].join(', ')}"
+  exit 0
+end
+
+parser = InvoiceMaster::Parser.new(debug: options[:debug])
+success_count = 0
+failed_files = []
+
+image_files.each do |image_path|
+  # 檢查對應的 JSON 檔案是否已存在
+  json_path = image_path.sub(/\.[^.]+$/, '.json')
+  if File.exist?(json_path)
+    puts "Skipping: #{image_path} (JSON already exists)"
+    next
+  end
+
+  puts "Processing: #{image_path}"
+  begin
+    json_data = parser.parse(image_path)
+    output_path = image_path.sub(/\.[^.]+$/, '.json')
+    File.write(output_path, JSON.pretty_generate(json_data))
+    puts "  Saved to #{output_path}"
+    success_count += 1
+  rescue => e
+    puts "\nError processing #{image_path}:"
+    puts e.message
+    puts e.backtrace.join("\n")
+    exit 1
+  end
+end
+
+puts "\nSummary:"
+puts "Successfully processed: #{success_count} files"
+if failed_files.any?
+  puts "Failed to process: #{failed_files.size} files"
+  puts "\nFailed files:"
+  failed_files.each do |file, error|
+    puts "- #{file}"
+    puts "  Error: #{error}"
+  end
+end

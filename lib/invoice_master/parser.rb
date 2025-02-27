@@ -1,54 +1,74 @@
 require 'base64'
 require 'vips'
+require_relative 'llm_client'
+require_relative 'json_schema'
 
 module InvoiceMaster
   class Parser
-    def initialize
-      @llm_client = LlmClient.new
+    attr_accessor :debug
+
+    def initialize(llm_client: LlmClient.new, debug: false)
+      @llm_client = llm_client
+      @debug = debug
     end
 
     def parse(image_path)
-      # 讀取並預處理圖片
-      image = preprocess_image(image_path)
-      
-      # 將圖片轉換為 base64
-      image_content = encode_image(image)
-      
-      # 使用 LLM 解析圖片內容
+      # 檢查檔案是否存在
+      raise Error, "File not found: #{image_path}" unless File.exist?(image_path)
+
+      # 讀取並轉換圖片
+      image_content = process_image(image_path)
+      debug_log "Image processed and converted to base64"
+
+      # 使用 LLM 解析圖片
+      puts "\nSending image to LLM for analysis..."
       json_data = @llm_client.extract_invoice_data(image_content)
-      
-      # 驗證 JSON 格式
-      JsonSchema.validate(json_data)
-      
+      puts "\nLLM Response:"
+      puts JSON.pretty_generate(json_data)
+      puts "\n"
+      debug_log "LLM Response: #{JSON.pretty_generate(json_data)}"
+
+      # 檢查是否為合法的 JSON Hash
+      raise Error, "Invalid JSON response" unless json_data.is_a?(Hash)
+
+      # 儲存 JSON 檔案
+      output_path = image_path.sub(/\.[^.]+$/, '.json')
+      File.write(output_path, JSON.pretty_generate(json_data))
+      debug_log "Successfully parsed invoice and saved to #{output_path}"
+
       json_data
-    rescue Vips::Error => e
-      raise Error, "Image processing failed: #{e.message}"
+    rescue => e
+      puts "Error: #{e.message}"
+      raise e
     end
 
     private
 
-    def preprocess_image(image_path)
-      # 載入圖片
+    def process_image(image_path)
+      # 讀取圖片
       image = Vips::Image.new_from_file(image_path)
+      debug_log "Image format: #{image.get('vips-loader')}"
+      debug_log "Original image size: #{image.width}x#{image.height}"
 
-      # 圖片預處理：調整大小、增強對比度等
-      image = image.resize(0.5) if image.width > 2000 || image.height > 2000
-      image = image.colourspace('b-w')  # 轉換為黑白
-      image = image.hist_equal          # 直方圖均衡化增強對比度
-      
-      image
+      # 如果圖片太大，調整大小
+      # if image.width > 2000 || image.height > 2000
+      #   image = image.resize(0.5)
+      #   debug_log "Image resized to: #{image.width}x#{image.height}"
+      # end
+
+      # 轉換為黑白並增強對比度
+      image = image.colourspace('b-w')
+      image = image.hist_equal
+      debug_log "Image converted to black and white and contrast enhanced"
+
+      # 將圖片直接轉換為 base64
+      buffer = image.write_to_buffer('.jpg', Q: 90, strip: true)
+      debug_log "Image converted to JPEG format (quality: 90, metadata stripped)"
+      Base64.strict_encode64(buffer)
     end
 
-    def encode_image(image)
-      # 將圖片轉換為 JPEG 格式的 base64 字串
-      temp_file = Tempfile.new(['invoice', '.jpg'])
-      begin
-        image.jpegsave(temp_file.path, Q: 85)
-        Base64.strict_encode64(File.read(temp_file.path))
-      ensure
-        temp_file.close
-        temp_file.unlink
-      end
+    def debug_log(message)
+      puts "[DEBUG] #{message}" if @debug
     end
   end
 end
