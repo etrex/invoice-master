@@ -4,6 +4,7 @@ require 'bundler/setup'
 require 'optparse'
 $LOAD_PATH.unshift(File.expand_path('../../lib', __dir__))
 require 'invoice_master'
+require 'invoice_master/llm_client_v2'
 
 options = {
   debug: false
@@ -36,10 +37,13 @@ end
 
 begin
   # 使用 V2 版本的 Parser
-  parser = InvoiceMaster::Parser.new(debug: options[:debug], client_class: InvoiceMaster::LlmClientV2)
+  parser = InvoiceMaster::Parser.new(
+    llm_client: InvoiceMaster::LlmClientV2.new,
+    debug: options[:debug]
+  )
   json_data = parser.parse(image_path)
   
-  output_path = image_path.sub(/\.[^.]+$/, '.json')
+  output_path = image_path.sub(/\.[^.]+$/, '.v2.json')
   File.write(output_path, JSON.pretty_generate(json_data))
   puts "Successfully parsed invoice and saved to #{output_path}"
 rescue InvoiceMaster::Error => e

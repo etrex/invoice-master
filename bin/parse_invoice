@@ -38,7 +38,7 @@ begin
   parser = InvoiceMaster::Parser.new(debug: options[:debug])
   json_data = parser.parse(image_path)
   
-  output_path = image_path.sub(/\.[^.]+$/, '.json')
+  output_path = image_path.sub(/\.[^.]+$/, '.v1.json')
   File.write(output_path, JSON.pretty_generate(json_data))
   puts "Successfully parsed invoice and saved to #{output_path}"
 rescue InvoiceMaster::Error => e
