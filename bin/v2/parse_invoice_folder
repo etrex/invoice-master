@@ -48,7 +48,7 @@ unless File.directory?(folder_path)
 end
 
 # 取得所有符合副檔名的圖檔
-image_files = Dir.glob(File.join(folder_path, "**", "*.{#{options[:extensions].join(',')}}"))
+image_files = Dir.glob(File.join(folder_path, "*.{#{options[:extensions].join(',')}}"))
 
 if image_files.empty?
   puts "No image files found in '#{folder_path}' with extensions: #{options[:extensions].join(', ')}"
