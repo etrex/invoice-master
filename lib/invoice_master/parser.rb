@@ -50,17 +50,6 @@ module InvoiceMaster
       debug_log "Image format: #{image.get('vips-loader')}"
       debug_log "Original image size: #{image.width}x#{image.height}"
 
-      # 如果圖片太大，調整大小
-      # if image.width > 2000 || image.height > 2000
-      #   image = image.resize(0.5)
-      #   debug_log "Image resized to: #{image.width}x#{image.height}"
-      # end
-
-      # 轉換為黑白並增強對比度
-      image = image.colourspace('b-w')
-      image = image.hist_equal
-      debug_log "Image converted to black and white and contrast enhanced"
-
       # 將圖片直接轉換為 base64
       buffer = image.write_to_buffer('.jpg', Q: 90, strip: true)
       debug_log "Image converted to JPEG format (quality: 90, metadata stripped)"

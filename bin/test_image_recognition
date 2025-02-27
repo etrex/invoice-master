@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+
+require 'dotenv'
+require_relative '../lib/invoice_master/llm_client_test'
+
+# Load environment variables
+Dotenv.load
+
+# Get the image path from command line argument
+image_path = ARGV[0]
+unless image_path
+  puts "Please provide an image path as argument"
+  exit 1
+end
+
+unless File.exist?(image_path)
+  puts "Image file not found: #{image_path}"
+  exit 1
+end
+
+# Initialize the client with API key
+client = InvoiceMaster::LlmClientTest.new(ENV['ANTHROPIC_API_KEY'])
+
+# Process the image
+client.extract_image_content(image_path)

@@ -119,9 +119,10 @@ module InvoiceMaster
           'Authorization' => "Bearer #{@api_key}",
           'Content-Type' => 'application/json'
         },
+        timeout: 300,  # 5 minutes timeout
+        read_timeout: 300,  # 5 minutes read timeout
         body: {
           model: @model,
-          temperature: 0,
           messages: [
             {
               role: 'system',

@@ -1,0 +1,52 @@
+#!/usr/bin/env ruby
+
+require 'bundler/setup'
+require 'optparse'
+$LOAD_PATH.unshift(File.expand_path('../../lib', __dir__))
+require 'invoice_master'
+require 'invoice_master/llm_client_v3'
+
+options = {
+  debug: false
+}
+
+# 解析命令列參數
+OptionParser.new do |opts|
+  opts.banner = "Usage: #{$PROGRAM_NAME} [options] <image_file>"
+
+  opts.on("-d", "--debug", "Enable debug mode") do |d|
+    options[:debug] = d
+  end
+
+  opts.on("-h", "--help", "Show this help message") do
+    puts opts
+    exit
+  end
+end.parse!
+
+if ARGV.empty?
+  puts "Error: Please provide an image file"
+  exit 1
+end
+
+image_path = ARGV[0]
+unless File.exist?(image_path)
+  puts "Error: File '#{image_path}' not found"
+  exit 1
+end
+
+begin
+  # 使用 V3 版本的 Parser
+  parser = InvoiceMaster::Parser.new(
+    llm_client: InvoiceMaster::LlmClientV3.new,
+    debug: options[:debug]
+  )
+  json_data = parser.parse(image_path)
+  
+  output_path = image_path.sub(/\.[^.]+$/, '.v3.json')
+  File.write(output_path, JSON.pretty_generate(json_data))
+  puts "Successfully parsed invoice and saved to #{output_path}"
+rescue InvoiceMaster::Error => e
+  puts "Error: #{e.message}"
+  exit 1
+end
