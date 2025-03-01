@@ -3,6 +3,7 @@
 
 require 'bundler/setup'
 require 'invoice_master/ocr_client'
+require 'invoice_master/image_processor'
 require 'pathname'
 require 'optparse'
 require 'dotenv'
@@ -39,6 +40,10 @@ OptionParser.new do |opts|
   opts.on("-q", "--quality QUALITY", Integer, "JPEG quality (1-100, default: 90)") do |quality|
     options[:quality] = quality if quality >= 1 && quality <= 100
   end
+  
+  opts.on("-o", "--output-dir DIR", "Output directory for OCR text files (default: same as input)") do |dir|
+    options[:output_dir] = dir
+  end
 end.parse!
 
 # 檢查是否提供了資料夾路徑
@@ -55,8 +60,9 @@ unless File.directory?(folder_path)
   exit 1
 end
 
-# 建立 OCR 客戶端
-ocr_client = InvoiceMaster::OcrClient.new
+# 設定輸出資料夾
+output_dir = options[:output_dir] || folder_path
+FileUtils.mkdir_p(output_dir) unless File.directory?(output_dir)
 
 # 常見圖檔副檔名
 IMAGE_EXTENSIONS = %w[.jpg .jpeg .png .gif .webp .bmp .tiff .tif]
@@ -68,7 +74,7 @@ def find_images(folder_path, recursive = false)
   if recursive
     # 使用 Dir.glob 遞迴尋找符合條件的檔案
     IMAGE_EXTENSIONS.each do |ext|
-      images.concat(Dir.glob(File.join(folder_path, "*#{ext}"), File::FNM_CASEFOLD))
+      images.concat(Dir.glob(File.join(folder_path, "**/*#{ext}"), File::FNM_CASEFOLD))
     end
   else
     # 不遞迴，只找出資料夾中的檔案
@@ -110,20 +116,32 @@ if options[:quality]
   puts "Using JPEG quality: #{options[:quality]}" if options[:verbose]
 end
 
+# 建立 ImageProcessor 和 OcrClient 實例
+image_processor = InvoiceMaster::ImageProcessor.new(
+  max_width: options[:max_width],
+  max_height: options[:max_height],
+  quality: options[:quality] || 90
+)
+ocr_client = InvoiceMaster::OcrClient.new(image_processor: image_processor)
+
 # 處理每一張圖檔
 images.each_with_index do |image_path, index|
   # 計算輸出檔案名稱
-  basename = File.basename(image_path, File.extname(image_path))
-  output_path = File.join(File.dirname(image_path), "#{basename}_ocr.txt")
+  relative_path = Pathname.new(image_path).relative_path_from(Pathname.new(folder_path))
+  output_path = File.join(output_dir, "#{File.basename(image_path, '.*')}_ocr.txt")
+  
+  # 如果輸出目錄不同於輸入目錄，則保持相同的目錄結構
+  if output_dir != folder_path && options[:recursive]
+    output_dir_for_file = File.join(output_dir, File.dirname(relative_path))
+    FileUtils.mkdir_p(output_dir_for_file) unless File.directory?(output_dir_for_file)
+    output_path = File.join(output_dir_for_file, "#{File.basename(image_path, '.*')}_ocr.txt")
+  end
   
   puts "[#{index + 1}/#{images.length}] Processing: #{image_path}" if options[:verbose]
   
   begin
     # 執行 OCR
-    text = ocr_client.call(image_path, 
-                          max_width: options[:max_width], 
-                          max_height: options[:max_height],
-                          quality: options[:quality] || 90)
+    text = ocr_client.call(image_path)
     
     # 寫入檔案
     File.write(output_path, text)

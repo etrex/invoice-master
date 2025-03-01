@@ -3,6 +3,7 @@
 
 require 'bundler/setup'
 require 'invoice_master/ocr_client'
+require 'invoice_master/image_processor'
 require 'pathname'
 require 'optparse'
 require 'dotenv'
@@ -60,8 +61,18 @@ unless image_path.downcase.end_with?(*%w[.jpg .jpeg .png .gif .webp .pdf])
   puts "Warning: #{image_path} may not be a supported image format"
 end
 
-# 初始化 OCR 客戶端
-ocr_client = InvoiceMaster::OcrClient.new
+# 設定預設的最大寬度和高度
+max_width = options[:max_width] || 1024
+max_height = options[:max_height] || 1024
+quality = options[:quality] || 90
+
+# 建立 ImageProcessor 和 OcrClient 實例
+image_processor = InvoiceMaster::ImageProcessor.new(
+  max_width: max_width,
+  max_height: max_height,
+  quality: quality
+)
+ocr_client = InvoiceMaster::OcrClient.new(image_processor: image_processor)
 
 puts "Processing: #{image_path}" if options[:verbose]
 
@@ -75,10 +86,7 @@ end
 
 begin
   # 執行 OCR
-  text = ocr_client.call(image_path, 
-                        max_width: options[:max_width], 
-                        max_height: options[:max_height],
-                        quality: options[:quality] || 90)
+  text = ocr_client.call(image_path)
   
   # 決定輸出檔案路徑
   output_path = if options[:output_path]
