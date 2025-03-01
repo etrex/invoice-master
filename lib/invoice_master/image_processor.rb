@@ -6,17 +6,18 @@ module InvoiceMaster
     # @param image_input [String, Vips::Image] 圖片輸入，可以是檔案路徑、base64 字串或 Vips::Image 物件
     # @param max_width [Integer, nil] 最大寬度，如果不為 nil，則會縮放圖片
     # @param max_height [Integer, nil] 最大高度，如果不為 nil，則會縮放圖片
+    # @param quality [Integer] JPEG 品質 (1-100)，預設為 90
     # @return [String] base64 編碼的圖片
-    def self.to_base64(image_input, max_width: nil, max_height: nil)
+    def self.to_base64(image_input, max_width: nil, max_height: nil, quality: 90)
       # 如果已經是 base64 字串，則直接使用
       if image_input.is_a?(String) && is_base64?(image_input)
         return image_input
       # 如果是檔案路徑，則讀取檔案並轉換為 base64
       elsif image_input.is_a?(String) && File.exist?(image_input)
-        return file_to_base64(image_input, max_width: max_width, max_height: max_height)
+        return file_to_base64(image_input, max_width: max_width, max_height: max_height, quality: quality)
       # 如果是 Vips::Image 物件，則轉換為 base64
       elsif defined?(Vips::Image) && image_input.is_a?(Vips::Image)
-        return vips_to_base64(image_input, max_width: max_width, max_height: max_height)
+        return vips_to_base64(image_input, max_width: max_width, max_height: max_height, quality: quality)
       else
         raise Error, "Invalid image input: #{image_input}. Must be a valid file path, base64 string, or Vips::Image object."
       end
@@ -26,17 +27,19 @@ module InvoiceMaster
     # @param image_inputs [Array<String, Vips::Image>] 圖片輸入的陣列
     # @param max_width [Integer, nil] 最大寬度，如果不為 nil，則會縮放圖片
     # @param max_height [Integer, nil] 最大高度，如果不為 nil，則會縮放圖片
+    # @param quality [Integer] JPEG 品質 (1-100)，預設為 90
     # @return [Array<String>] base64 編碼的圖片陣列
-    def self.batch_to_base64(image_inputs, max_width: nil, max_height: nil)
-      image_inputs.map { |input| to_base64(input, max_width: max_width, max_height: max_height) }
+    def self.batch_to_base64(image_inputs, max_width: nil, max_height: nil, quality: 90)
+      image_inputs.map { |input| to_base64(input, max_width: max_width, max_height: max_height, quality: quality) }
     end
     
     # 將檔案轉換為 base64 字串
     # @param file_path [String] 檔案路徑
     # @param max_width [Integer, nil] 最大寬度，如果不為 nil，則會縮放圖片
     # @param max_height [Integer, nil] 最大高度，如果不為 nil，則會縮放圖片
+    # @param quality [Integer] JPEG 品質 (1-100)，預設為 90
     # @return [String] base64 編碼的圖片
-    def self.file_to_base64(file_path, max_width: nil, max_height: nil)
+    def self.file_to_base64(file_path, max_width: nil, max_height: nil, quality: 90)
       # 確認檔案存在
       raise Error, "File not found: #{file_path}" unless File.exist?(file_path)
       
@@ -48,7 +51,7 @@ module InvoiceMaster
           # 縮放圖片
           image = resize_image(image, max_width, max_height)
           # 轉換為 base64
-          return vips_to_base64(image)
+          return vips_to_base64(image, quality: quality)
         rescue LoadError
           puts "Warning: ruby-vips gem is not available. Image resizing is disabled."
         rescue => e
@@ -70,8 +73,9 @@ module InvoiceMaster
     # @param vips_img [Vips::Image] Vips 圖片物件
     # @param max_width [Integer, nil] 最大寬度，如果不為 nil，則會縮放圖片
     # @param max_height [Integer, nil] 最大高度，如果不為 nil，則會縮放圖片
+    # @param quality [Integer] JPEG 品質 (1-100)，預設為 90
     # @return [String] base64 編碼的圖片
-    def self.vips_to_base64(vips_img, max_width: nil, max_height: nil)
+    def self.vips_to_base64(vips_img, max_width: nil, max_height: nil, quality: 90)
       begin
         # 如果需要縮放，則處理
         if max_width || max_height
@@ -80,7 +84,7 @@ module InvoiceMaster
         
         # 將圖片轉換為 JPEG 格式並存入記憶體
         buffer = StringIO.new
-        vips_img.jpegsave_buffer(buffer: buffer)
+        vips_img.jpegsave_buffer(buffer: buffer, Q: quality)
         buffer.rewind
         
         # 轉換為 base64

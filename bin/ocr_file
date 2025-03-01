@@ -35,6 +35,10 @@ OptionParser.new do |opts|
   opts.on("-o", "--output PATH", "Output file path (default: same name with _ocr.txt suffix)") do |path|
     options[:output_path] = path
   end
+  
+  opts.on("-q", "--quality QUALITY", Integer, "JPEG quality (1-100, default: 90)") do |quality|
+    options[:quality] = quality if quality >= 1 && quality <= 100
+  end
 end.parse!
 
 # 檢查是否提供了圖片檔案路徑
@@ -71,7 +75,10 @@ end
 
 begin
   # 執行 OCR
-  text = ocr_client.call(image_path, max_width: options[:max_width], max_height: options[:max_height])
+  text = ocr_client.call(image_path, 
+                        max_width: options[:max_width], 
+                        max_height: options[:max_height],
+                        quality: options[:quality] || 90)
   
   # 決定輸出檔案路徑
   output_path = if options[:output_path]

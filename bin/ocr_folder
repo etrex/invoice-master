@@ -35,6 +35,10 @@ OptionParser.new do |opts|
   opts.on("--max-height HEIGHT", Integer, "Maximum height for images (will resize if larger)") do |height|
     options[:max_height] = height
   end
+  
+  opts.on("-q", "--quality QUALITY", Integer, "JPEG quality (1-100, default: 90)") do |quality|
+    options[:quality] = quality if quality >= 1 && quality <= 100
+  end
 end.parse!
 
 # 檢查是否提供了資料夾路徑
@@ -101,6 +105,11 @@ if options[:max_width] || options[:max_height]
   puts "Images will be resized to max #{resize_info.join(', ')}" if options[:verbose]
 end
 
+# 顯示品質資訊
+if options[:quality]
+  puts "Using JPEG quality: #{options[:quality]}" if options[:verbose]
+end
+
 # 處理每一張圖檔
 images.each_with_index do |image_path, index|
   # 計算輸出檔案名稱
@@ -111,7 +120,10 @@ images.each_with_index do |image_path, index|
   
   begin
     # 執行 OCR
-    text = ocr_client.call(image_path, max_width: options[:max_width], max_height: options[:max_height])
+    text = ocr_client.call(image_path, 
+                          max_width: options[:max_width], 
+                          max_height: options[:max_height],
+                          quality: options[:quality] || 90)
     
     # 寫入檔案
     File.write(output_path, text)
