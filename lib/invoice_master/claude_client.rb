@@ -60,33 +60,34 @@ module InvoiceMaster
         when String
           # 檢查是否為 base64 編碼的圖片
           if @image_processor.is_base64?(item)
-            {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: "image/jpeg",
-                data: item
-              }
-            }
+            format_base64_image(item)
           else
             # 一般文字
             { type: "text", text: item }
           end
         when ->(obj) { defined?(Vips::Image) && obj.is_a?(Vips::Image) }
           # 處理 Vips::Image 物件，使用 ImageProcessor 轉換為 base64
-          {
-            type: "image",
-            source: {
-              type: "base64",
-              media_type: "image/jpeg",
-              data: @image_processor.vips_to_base64(item, quality: 75)
-            }
-          }
+          base64_data = @image_processor.vips_to_base64(item, quality: 75)
+          format_base64_image(base64_data)
         else
           # 不支援的類型
           raise Error, "Unsupported input type: #{item.class}. Only String, base64 encoded images, or Vips::Image are supported."
         end
       end
+    end
+    
+    # 格式化 base64 圖片為 Claude API 所需格式
+    # @param base64_data [String] Base64 編碼的圖片資料
+    # @return [Hash] 格式化為 Claude API 所需的圖片物件
+    def format_base64_image(base64_data)
+      {
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: "image/jpeg",
+          data: base64_data
+        }
+      }
     end
     
     def handle_response(response)

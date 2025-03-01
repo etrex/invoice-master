@@ -1,7 +1,7 @@
 require 'vips'
 require 'base64'
 require 'stringio'
-require 'mime/types'
+require 'fileutils'
 
 module InvoiceMaster
   class ImageProcessor
@@ -11,85 +11,64 @@ module InvoiceMaster
       @quality = quality
     end
 
-    # 將圖片轉換為 base64 字串
-    # @param image_input [String, Vips::Image] 圖片路徑、base64 字串或 Vips::Image 物件
-    # @param max_width [Integer, nil] 最大寬度，如果不為 nil，則會縮放圖片
-    # @param max_height [Integer, nil] 最大高度，如果不為 nil，則會縮放圖片
-    # @param quality [Integer] JPEG 品質 (1-100)，預設為 90
+    # 將檔案路徑的圖片轉換為 base64 字串
+    # @param file_path [String] 圖片檔案路徑
     # @return [String] base64 格式的圖片
-    def to_base64(image_input, max_width: nil, max_height: nil, quality: nil)
-      # 使用傳入參數，若無則使用預設值
-      max_width ||= @max_width
-      max_height ||= @max_height
-      quality ||= @quality
-
-      begin
-        # 處理不同類型的輸入
-        case image_input
-        when String
-          if File.exist?(image_input)
-            # 讀取檔案
-            image = Vips::Image.new_from_file(image_input)
-            vips_to_base64(image, max_width: max_width, max_height: max_height, quality: quality)
-          elsif is_base64?(image_input)
-            # 已經是 base64 字串，直接返回
-            return image_input
-          else
-            raise Error, "Invalid input: #{image_input}. It is not a file path or a base64 string."
-          end
-        when ->(obj) { defined?(Vips::Image) && obj.is_a?(Vips::Image) }
-          # 直接處理 Vips::Image 物件
-          vips_to_base64(image_input, max_width: max_width, max_height: max_height, quality: quality)
-        else
-          raise Error, "Unsupported input type: #{image_input.class}. Only String and Vips::Image are supported."
-        end
-      rescue => e
-        raise Error, "Failed to convert image to base64: #{e.message}"
+    def file_to_base64(file_path)
+      unless File.exist?(file_path)
+        raise Error, "File not found: #{file_path}"
       end
-    end
-
-    # 將多個圖片轉換為 base64 字串陣列
-    # @param image_paths [Array<String>] 圖片路徑陣列
-    # @param max_width [Integer, nil] 最大寬度，如果不為 nil，則會縮放圖片
-    # @param max_height [Integer, nil] 最大高度，如果不為 nil，則會縮放圖片
-    # @param quality [Integer] JPEG 品質 (1-100)，預設為 90
-    # @return [Array<String>] base64 格式的圖片陣列
-    def images_to_base64(image_paths, max_width: nil, max_height: nil, quality: nil)
-      # 使用傳入參數，若無則使用預設值
-      max_width ||= @max_width
-      max_height ||= @max_height
-      quality ||= @quality
-
-      image_paths.map { |path| to_base64(path, max_width: max_width, max_height: max_height, quality: quality) }
+      
+      # 讀取檔案
+      image = Vips::Image.new_from_file(file_path)
+      vips_to_base64(image)
+    rescue => e
+      raise Error, "Failed to convert file to base64: #{e.message}"
     end
 
     # 將 Vips::Image 物件轉換為 base64 字串
     # @param vips_img [Vips::Image] Vips::Image 物件
-    # @param max_width [Integer, nil] 最大寬度，如果不為 nil，則會縮放圖片
-    # @param max_height [Integer, nil] 最大高度，如果不為 nil，則會縮放圖片
-    # @param quality [Integer] JPEG 品質 (1-100)，預設為 90
     # @return [String] base64 格式的圖片
-    def vips_to_base64(vips_img, max_width: nil, max_height: nil, quality: nil)
-      # 使用傳入參數，若無則使用預設值
-      max_width ||= @max_width
-      max_height ||= @max_height
-      quality ||= @quality
+    def vips_to_base64(vips_img)
+      # 調整圖片大小（如有需要）
+      vips_img = resize_image(vips_img, @max_width, @max_height)
 
+      # 將圖片轉換為 JPEG 格式並存入記憶體
+      jpeg_data = vips_img.jpegsave_buffer(Q: @quality)
+      
+      # 轉換為 base64
+      Base64.strict_encode64(jpeg_data)
+    rescue => e
+      raise Error, "Failed to convert Vips::Image to base64: #{e.message}"
+    end
+    
+    # 將 base64 編碼的圖片儲存為檔案
+    # @param base64_data [String] base64 編碼的圖片資料
+    # @param output_path [String] 輸出檔案路徑
+    # @return [Boolean] 是否成功儲存
+    def base64_to_file(base64_data, output_path)
+      # 移除可能的 data URI 前綴 (例如 "data:image/jpeg;base64,")
+      if base64_data.include?('base64,')
+        base64_data = base64_data.split('base64,').last
+      end
+      
+      # 解碼 base64 資料為二進位資料
       begin
-        # 調整圖片大小（如有需要）
-        if max_width || max_height
-          vips_img = resize_image(vips_img, max_width, max_height)
-        end
-
-        # 將圖片轉換為 JPEG 格式並存入記憶體
-        buffer = StringIO.new
-        vips_img.jpegsave_buffer(buffer: buffer, Q: quality)
-        buffer.rewind
-        
-        # 轉換為 base64
-        Base64.strict_encode64(buffer.read)
+        binary_data = Base64.strict_decode64(base64_data)
       rescue => e
-        raise Error, "Failed to convert Vips::Image to base64: #{e.message}"
+        raise Error, "Failed to decode base64 data: #{e.message}"
+      end
+      
+      # 確保輸出目錄存在
+      output_dir = File.dirname(output_path)
+      FileUtils.mkdir_p(output_dir) unless Dir.exist?(output_dir)
+      
+      # 寫入檔案
+      begin
+        File.binwrite(output_path, binary_data)
+        true
+      rescue => e
+        raise Error, "Failed to write image to #{output_path}: #{e.message}"
       end
     end
 
@@ -116,10 +95,6 @@ module InvoiceMaster
       # 如果圖片已經小於或等於最大尺寸，直接返回原圖
       return vips_img if scale >= 1
 
-      # 計算新尺寸
-      new_width = (original_width * scale).to_i
-      new_height = (original_height * scale).to_i
-
       # 調整圖片大小
       vips_img.resize(scale)
     end
@@ -142,37 +117,11 @@ module InvoiceMaster
           decoded.start_with?("\xFF\xD8\xFF") || # JPEG
           decoded.start_with?("\x89PNG\r\n\x1A\n") || # PNG
           decoded.start_with?("GIF87a") || decoded.start_with?("GIF89a") || # GIF
-          (decoded.length > 12 && decoded[8..11] == "WEBP") # WebP
+          (decoded.length > 12 && decoded[8..11] == "WEBP") || # WebP
+          decoded.start_with?("\xFF\xD9") # JPEG (from vips)
         )
       rescue
         return false
-      end
-    end
-
-    # 相容性靜態方法，方便使用
-    class << self
-      def new_with_defaults
-        new(max_width: 1024, max_height: 1024, quality: 90)
-      end
-
-      def to_base64(image_input, max_width: nil, max_height: nil, quality: 90)
-        instance = new(max_width: max_width || 1024, max_height: max_height || 1024, quality: quality)
-        instance.to_base64(image_input)
-      end
-
-      def images_to_base64(image_paths, max_width: nil, max_height: nil, quality: 90)
-        instance = new(max_width: max_width || 1024, max_height: max_height || 1024, quality: quality)
-        instance.images_to_base64(image_paths)
-      end
-
-      def vips_to_base64(vips_img, max_width: nil, max_height: nil, quality: 90)
-        instance = new(max_width: max_width || 1024, max_height: max_height || 1024, quality: quality)
-        instance.vips_to_base64(vips_img)
-      end
-
-      def is_base64?(str)
-        instance = new
-        instance.is_base64?(str)
       end
     end
   end

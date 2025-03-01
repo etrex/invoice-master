@@ -85,8 +85,8 @@ if options[:max_width] || options[:max_height]
 end
 
 begin
-  # 執行 OCR
-  text = ocr_client.call(image_path)
+  # 執行 OCR，使用新的 call_from_file 方法明確指定是從檔案路徑處理
+  text = ocr_client.call_from_file(image_path)
   
   # 決定輸出檔案路徑
   output_path = if options[:output_path]

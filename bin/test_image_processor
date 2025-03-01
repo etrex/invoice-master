@@ -1,0 +1,110 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'bundler/setup'
+require 'invoice_master/image_processor'
+require 'optparse'
+require 'fileutils'
+
+# 解析命令列參數
+options = {
+  quality: 80,
+  max_width: 1024,
+  max_height: 1024
+}
+
+OptionParser.new do |opts|
+  opts.banner = "Usage: test_image_processor [options] INPUT_FILE OUTPUT_FILE"
+  
+  opts.on("-h", "--help", "Show this help message") do
+    puts opts
+    exit
+  end
+  
+  opts.on("--max-width WIDTH", Integer, "Maximum width for image (will resize if larger)") do |width|
+    options[:max_width] = width
+  end
+  
+  opts.on("--max-height HEIGHT", Integer, "Maximum height for image (will resize if larger)") do |height|
+    options[:max_height] = height
+  end
+  
+  opts.on("-q", "--quality QUALITY", Integer, "JPEG quality (1-100, default: 80)") do |quality|
+    options[:quality] = quality if quality >= 1 && quality <= 100
+  end
+  
+  opts.on("-v", "--verbose", "Show verbose output") do
+    options[:verbose] = true
+  end
+end.parse!
+
+# 檢查是否提供了輸入輸出檔案路徑
+if ARGV.length < 2
+  puts "Error: Please provide input and output file paths"
+  puts "Usage: test_image_processor [options] INPUT_FILE OUTPUT_FILE"
+  exit 1
+end
+
+input_path = ARGV[0]
+output_path = ARGV[1]
+
+# 檢查檔案是否存在
+unless File.file?(input_path)
+  puts "Error: #{input_path} is not a valid file"
+  exit 1
+end
+
+# 檢查檔案是否為支援的圖片格式
+unless input_path.downcase.end_with?(*%w[.jpg .jpeg .png .gif .webp .pdf])
+  puts "Warning: #{input_path} may not be a supported image format"
+end
+
+# 建立 ImageProcessor 實例
+puts "Creating ImageProcessor with max_width=#{options[:max_width]}, max_height=#{options[:max_height]}, quality=#{options[:quality]}" if options[:verbose]
+image_processor = InvoiceMaster::ImageProcessor.new(
+  max_width: options[:max_width],
+  max_height: options[:max_height],
+  quality: options[:quality]
+)
+
+begin
+  # 步驟 1: 將圖片轉換為 base64
+  puts "Converting #{input_path} to base64..." if options[:verbose]
+  start_time = Time.now
+  base64_data = image_processor.file_to_base64(input_path)
+  conversion_time = Time.now - start_time
+  
+  # 步驟 2: 顯示 base64 的長度
+  if options[:verbose]
+    puts "Base64 conversion completed in #{conversion_time.round(2)} seconds"
+    puts "Base64 data length: #{base64_data.length} characters"
+  end
+  
+  # 步驟 3: 將 base64 轉換回圖片並儲存
+  puts "Converting base64 back to image and saving to #{output_path}..." if options[:verbose]
+  start_time = Time.now
+  image_processor.base64_to_file(base64_data, output_path)
+  save_time = Time.now - start_time
+  
+  if options[:verbose]
+    puts "Image saved in #{save_time.round(2)} seconds"
+    
+    # 步驟 4: 顯示檔案大小比較
+    if File.exist?(output_path)
+      original_size = File.size(input_path)
+      new_size = File.size(output_path)
+      size_diff = new_size - original_size
+      size_percentage = (new_size.to_f / original_size * 100).round(2)
+      
+      puts "\nFile size comparison:"
+      puts "Original: #{original_size} bytes"
+      puts "New:      #{new_size} bytes"
+      puts "Diff:     #{size_diff > 0 ? '+' : ''}#{size_diff} bytes (#{size_percentage}%)"
+    end
+  end
+  
+  puts "Conversion completed successfully. Image saved to: #{output_path}"
+rescue => e
+  puts "Error: #{e.message}"
+  exit 1
+end
