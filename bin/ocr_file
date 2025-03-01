@@ -3,8 +3,6 @@
 
 require 'bundler/setup'
 require 'invoice_master/ocr_client'
-require 'invoice_master/image_processor'
-require 'pathname'
 require 'optparse'
 require 'dotenv'
 
@@ -37,7 +35,7 @@ OptionParser.new do |opts|
     options[:output_path] = path
   end
   
-  opts.on("-q", "--quality QUALITY", Integer, "JPEG quality (1-100, default: 90)") do |quality|
+  opts.on("-q", "--quality QUALITY", Integer, "JPEG quality (1-100, default: 85)") do |quality|
     options[:quality] = quality if quality >= 1 && quality <= 100
   end
 end.parse!
@@ -77,16 +75,17 @@ ocr_client = InvoiceMaster::OcrClient.new(image_processor: image_processor)
 puts "Processing: #{image_path}" if options[:verbose]
 
 # 顯示縮放資訊
-if options[:max_width] || options[:max_height]
+if options[:verbose]
   resize_info = []
-  resize_info << "width: #{options[:max_width]}" if options[:max_width]
-  resize_info << "height: #{options[:max_height]}" if options[:max_height]
-  puts "Image will be resized to max #{resize_info.join(', ')}" if options[:verbose]
+  resize_info << "width: #{max_width}" if max_width
+  resize_info << "height: #{max_height}" if max_height
+  puts "Image will be resized to max #{resize_info.join(', ')}"
+  puts "Using JPEG quality: #{quality}"
 end
 
 begin
-  # 執行 OCR，使用新的 call_from_file 方法明確指定是從檔案路徑處理
-  text = ocr_client.call_from_file(image_path)
+  # 執行 OCR
+  text = ocr_client.call(image_path)
   
   # 決定輸出檔案路徑
   output_path = if options[:output_path]

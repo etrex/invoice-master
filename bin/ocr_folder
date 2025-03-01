@@ -2,14 +2,16 @@
 # frozen_string_literal: true
 
 require 'bundler/setup'
-require 'invoice_master/ocr_client'
-require 'invoice_master/image_processor'
-require 'pathname'
 require 'optparse'
+require 'pathname'
+require 'fileutils'
 require 'dotenv'
 
 # 載入環境變數
 Dotenv.load
+
+# 常見圖檔副檔名
+IMAGE_EXTENSIONS = %w[.jpg .jpeg .png .gif .webp .bmp .tiff .tif]
 
 # 解析命令列參數
 options = {}
@@ -19,10 +21,6 @@ OptionParser.new do |opts|
   opts.on("-h", "--help", "Show this help message") do
     puts opts
     exit
-  end
-  
-  opts.on("-r", "--recursive", "Process subdirectories recursively") do
-    options[:recursive] = true
   end
   
   opts.on("-v", "--verbose", "Show verbose output") do
@@ -37,7 +35,7 @@ OptionParser.new do |opts|
     options[:max_height] = height
   end
   
-  opts.on("-q", "--quality QUALITY", Integer, "JPEG quality (1-100, default: 90)") do |quality|
+  opts.on("-q", "--quality QUALITY", Integer, "JPEG quality (1-100, default: 85)") do |quality|
     options[:quality] = quality if quality >= 1 && quality <= 100
   end
   
@@ -64,37 +62,20 @@ end
 output_dir = options[:output_dir] || folder_path
 FileUtils.mkdir_p(output_dir) unless File.directory?(output_dir)
 
-# 常見圖檔副檔名
-IMAGE_EXTENSIONS = %w[.jpg .jpeg .png .gif .webp .bmp .tiff .tif]
-
-# 取得所有圖檔
-def find_images(folder_path, recursive = false)
+# 取得資料夾中的所有圖檔
+def find_images(folder_path)
   images = []
   
-  if recursive
-    # 使用 Dir.glob 遞迴尋找符合條件的檔案
-    IMAGE_EXTENSIONS.each do |ext|
-      images.concat(Dir.glob(File.join(folder_path, "**/*#{ext}"), File::FNM_CASEFOLD))
-    end
-  else
-    # 不遞迴，只找出資料夾中的檔案
-    Dir.entries(folder_path).each do |entry|
-      next if entry == '.' || entry == '..'
-      
-      file_path = File.join(folder_path, entry)
-      next unless File.file?(file_path)
-      
-      # 檢查副檔名
-      ext = File.extname(file_path).downcase
-      images << file_path if IMAGE_EXTENSIONS.include?(ext)
-    end
+  # 使用 Dir.glob 尋找符合條件的檔案（只在當前資料夾層級）
+  IMAGE_EXTENSIONS.each do |ext|
+    images.concat(Dir.glob(File.join(folder_path, "*#{ext}"), File::FNM_CASEFOLD))
   end
   
   images
 end
 
 # 找出所有圖檔
-images = find_images(folder_path, options[:recursive])
+images = find_images(folder_path)
 
 if images.empty?
   puts "No images found in #{folder_path}"
@@ -103,53 +84,46 @@ end
 
 puts "Found #{images.length} image(s) to process" if options[:verbose]
 
-# 顯示縮放資訊
-if options[:max_width] || options[:max_height]
-  resize_info = []
-  resize_info << "width: #{options[:max_width]}" if options[:max_width]
-  resize_info << "height: #{options[:max_height]}" if options[:max_height]
-  puts "Images will be resized to max #{resize_info.join(', ')}" if options[:verbose]
-end
+# 構建基本的 ocr_file 命令參數
+ocr_file_path = File.expand_path("../ocr_file", __FILE__)
+ocr_cmd_base = [ocr_file_path]
 
-# 顯示品質資訊
-if options[:quality]
-  puts "Using JPEG quality: #{options[:quality]}" if options[:verbose]
-end
-
-# 建立 ImageProcessor 和 OcrClient 實例
-image_processor = InvoiceMaster::ImageProcessor.new(
-  max_width: options[:max_width],
-  max_height: options[:max_height],
-  quality: options[:quality] || 90
-)
-ocr_client = InvoiceMaster::OcrClient.new(image_processor: image_processor)
+# 添加通用選項
+ocr_cmd_base << "-v" if options[:verbose]
+ocr_cmd_base << "--max-width=#{options[:max_width]}" if options[:max_width]
+ocr_cmd_base << "--max-height=#{options[:max_height]}" if options[:max_height]
+ocr_cmd_base << "--quality=#{options[:quality]}" if options[:quality]
 
 # 處理每一張圖檔
+processed_count = 0
+failed_count = 0
+
 images.each_with_index do |image_path, index|
   # 計算輸出檔案名稱
-  relative_path = Pathname.new(image_path).relative_path_from(Pathname.new(folder_path))
-  output_path = File.join(output_dir, "#{File.basename(image_path, '.*')}_ocr.txt")
-  
-  # 如果輸出目錄不同於輸入目錄，則保持相同的目錄結構
-  if output_dir != folder_path && options[:recursive]
-    output_dir_for_file = File.join(output_dir, File.dirname(relative_path))
-    FileUtils.mkdir_p(output_dir_for_file) unless File.directory?(output_dir_for_file)
-    output_path = File.join(output_dir_for_file, "#{File.basename(image_path, '.*')}_ocr.txt")
-  end
+  output_basename = "#{File.basename(image_path, '.*')}_ocr.txt"
+  output_path = File.join(output_dir, output_basename)
   
   puts "[#{index + 1}/#{images.length}] Processing: #{image_path}" if options[:verbose]
   
+  # 構建完整的 ocr_file 命令
+  ocr_cmd = ocr_cmd_base.dup
+  ocr_cmd << "-o" << output_path
+  ocr_cmd << image_path
+  
+  # 執行 ocr_file 命令
   begin
-    # 執行 OCR
-    text = ocr_client.call(image_path)
-    
-    # 寫入檔案
-    File.write(output_path, text)
-    
-    puts "  -> OCR result saved to: #{output_path}" if options[:verbose]
+    system(*ocr_cmd)
+    if $?.success?
+      processed_count += 1
+      puts "  -> OCR result saved to: #{output_path}" if options[:verbose]
+    else
+      failed_count += 1
+      puts "Error processing #{image_path}: ocr_file command failed with exit code #{$?.exitstatus}"
+    end
   rescue => e
-    puts "Error processing #{image_path}: #{e.message}"
+    failed_count += 1
+    puts "Error executing ocr_file for #{image_path}: #{e.message}"
   end
 end
 
-puts "OCR processing complete. Processed #{images.length} image(s)."
+puts "OCR processing complete. Successfully processed #{processed_count} image(s), failed: #{failed_count}."
