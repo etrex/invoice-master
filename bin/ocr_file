@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 require 'bundler/setup'
-require 'invoice_master/ocr_client'
+require_relative '../lib/invoice_master'
 require 'optparse'
 require 'dotenv'
 

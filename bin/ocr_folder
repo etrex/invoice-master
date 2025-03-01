@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require 'bundler/setup'
+require_relative '../lib/invoice_master'
 require 'optparse'
 require 'pathname'
 require 'fileutils'

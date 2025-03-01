@@ -2,7 +2,7 @@ require 'httparty'
 require 'json'
 require 'base64'
 require 'stringio'
-require 'invoice_master/image_processor'
+require_relative 'image_processor'
 
 module InvoiceMaster
   class ClaudeClient

@@ -1,5 +1,5 @@
-require 'invoice_master/claude_client'
-require 'invoice_master/image_processor'
+require_relative 'claude_client'
+require_relative 'image_processor'
 
 module InvoiceMaster
   class OcrClient
