@@ -1,0 +1,125 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'bundler/setup'
+require 'invoice_master/ocr_client'
+require 'pathname'
+require 'optparse'
+require 'dotenv'
+
+# 載入環境變數
+Dotenv.load
+
+# 解析命令列參數
+options = {}
+OptionParser.new do |opts|
+  opts.banner = "Usage: ocr_folder [options] DIRECTORY"
+  
+  opts.on("-h", "--help", "Show this help message") do
+    puts opts
+    exit
+  end
+  
+  opts.on("-r", "--recursive", "Process subdirectories recursively") do
+    options[:recursive] = true
+  end
+  
+  opts.on("-v", "--verbose", "Show verbose output") do
+    options[:verbose] = true
+  end
+  
+  opts.on("--max-width WIDTH", Integer, "Maximum width for images (will resize if larger)") do |width|
+    options[:max_width] = width
+  end
+  
+  opts.on("--max-height HEIGHT", Integer, "Maximum height for images (will resize if larger)") do |height|
+    options[:max_height] = height
+  end
+end.parse!
+
+# 檢查是否提供了資料夾路徑
+if ARGV.empty?
+  puts "Error: Please provide a directory path"
+  exit 1
+end
+
+folder_path = ARGV[0]
+
+# 檢查資料夾是否存在
+unless File.directory?(folder_path)
+  puts "Error: #{folder_path} is not a valid directory"
+  exit 1
+end
+
+# 建立 OCR 客戶端
+ocr_client = InvoiceMaster::OcrClient.new
+
+# 常見圖檔副檔名
+IMAGE_EXTENSIONS = %w[.jpg .jpeg .png .gif .webp .bmp .tiff .tif]
+
+# 取得所有圖檔
+def find_images(folder_path, recursive = false)
+  images = []
+  
+  if recursive
+    # 使用 Dir.glob 遞迴尋找符合條件的檔案
+    IMAGE_EXTENSIONS.each do |ext|
+      images.concat(Dir.glob(File.join(folder_path, "*#{ext}"), File::FNM_CASEFOLD))
+    end
+  else
+    # 不遞迴，只找出資料夾中的檔案
+    Dir.entries(folder_path).each do |entry|
+      next if entry == '.' || entry == '..'
+      
+      file_path = File.join(folder_path, entry)
+      next unless File.file?(file_path)
+      
+      # 檢查副檔名
+      ext = File.extname(file_path).downcase
+      images << file_path if IMAGE_EXTENSIONS.include?(ext)
+    end
+  end
+  
+  images
+end
+
+# 找出所有圖檔
+images = find_images(folder_path, options[:recursive])
+
+if images.empty?
+  puts "No images found in #{folder_path}"
+  exit 0
+end
+
+puts "Found #{images.length} image(s) to process" if options[:verbose]
+
+# 顯示縮放資訊
+if options[:max_width] || options[:max_height]
+  resize_info = []
+  resize_info << "width: #{options[:max_width]}" if options[:max_width]
+  resize_info << "height: #{options[:max_height]}" if options[:max_height]
+  puts "Images will be resized to max #{resize_info.join(', ')}" if options[:verbose]
+end
+
+# 處理每一張圖檔
+images.each_with_index do |image_path, index|
+  # 計算輸出檔案名稱
+  basename = File.basename(image_path, File.extname(image_path))
+  output_path = File.join(File.dirname(image_path), "#{basename}_ocr.txt")
+  
+  puts "[#{index + 1}/#{images.length}] Processing: #{image_path}" if options[:verbose]
+  
+  begin
+    # 執行 OCR
+    text = ocr_client.call(image_path, max_width: options[:max_width], max_height: options[:max_height])
+    
+    # 寫入檔案
+    File.write(output_path, text)
+    
+    puts "  -> OCR result saved to: #{output_path}" if options[:verbose]
+  rescue => e
+    puts "Error processing #{image_path}: #{e.message}"
+  end
+end
+
+puts "OCR processing complete. Processed #{images.length} image(s)."

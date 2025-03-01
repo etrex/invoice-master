@@ -1,0 +1,93 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require 'bundler/setup'
+require 'invoice_master/ocr_client'
+require 'pathname'
+require 'optparse'
+require 'dotenv'
+
+# 載入環境變數
+Dotenv.load
+
+# 解析命令列參數
+options = {}
+OptionParser.new do |opts|
+  opts.banner = "Usage: ocr_file [options] IMAGE_FILE"
+  
+  opts.on("-h", "--help", "Show this help message") do
+    puts opts
+    exit
+  end
+  
+  opts.on("-v", "--verbose", "Show verbose output") do
+    options[:verbose] = true
+  end
+  
+  opts.on("--max-width WIDTH", Integer, "Maximum width for image (will resize if larger)") do |width|
+    options[:max_width] = width
+  end
+  
+  opts.on("--max-height HEIGHT", Integer, "Maximum height for image (will resize if larger)") do |height|
+    options[:max_height] = height
+  end
+  
+  opts.on("-o", "--output PATH", "Output file path (default: same name with _ocr.txt suffix)") do |path|
+    options[:output_path] = path
+  end
+end.parse!
+
+# 檢查是否提供了圖片檔案路徑
+if ARGV.empty?
+  puts "Error: Please provide an image file path"
+  exit 1
+end
+
+image_path = ARGV[0]
+
+# 檢查檔案是否存在
+unless File.file?(image_path)
+  puts "Error: #{image_path} is not a valid file"
+  exit 1
+end
+
+# 檢查檔案是否為支援的圖片格式
+unless image_path.downcase.end_with?(*%w[.jpg .jpeg .png .gif .webp .pdf])
+  puts "Warning: #{image_path} may not be a supported image format"
+end
+
+# 初始化 OCR 客戶端
+ocr_client = InvoiceMaster::OcrClient.new
+
+puts "Processing: #{image_path}" if options[:verbose]
+
+# 顯示縮放資訊
+if options[:max_width] || options[:max_height]
+  resize_info = []
+  resize_info << "width: #{options[:max_width]}" if options[:max_width]
+  resize_info << "height: #{options[:max_height]}" if options[:max_height]
+  puts "Image will be resized to max #{resize_info.join(', ')}" if options[:verbose]
+end
+
+begin
+  # 執行 OCR
+  text = ocr_client.call(image_path, max_width: options[:max_width], max_height: options[:max_height])
+  
+  # 決定輸出檔案路徑
+  output_path = if options[:output_path]
+                  options[:output_path]
+                else
+                  basename = File.basename(image_path, File.extname(image_path))
+                  File.join(File.dirname(image_path), "#{basename}_ocr.txt")
+                end
+  
+  # 寫入檔案
+  File.write(output_path, text)
+  
+  puts "OCR result saved to: #{output_path}"
+rescue => e
+  puts "Error processing #{image_path}: #{e.message}"
+  exit 1
+end
+
+puts "OCR processing complete."
