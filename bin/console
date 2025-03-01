@@ -1,0 +1,38 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Add lib directory to load path
+$LOAD_PATH.unshift File.expand_path('../lib', __dir__)
+
+require 'bundler/setup'
+require 'invoice_master/claude_client'
+require 'invoice_master/image_processor'
+require 'invoice_master/ocr_client'
+require 'dotenv'
+require 'irb'
+
+# Load environment variables from .env file
+Dotenv.load
+
+# Print welcome message and setup instructions
+puts "=== InvoiceMaster Interactive Console ==="
+puts "The following classes are available:"
+puts "- InvoiceMaster::ClaudeClient"
+puts "- InvoiceMaster::ImageProcessor"
+puts "- InvoiceMaster::OcrClient"
+puts 
+puts "Example usage:"
+puts "  processor = InvoiceMaster::ImageProcessor.new(max_width: 800, max_height: 800, quality: 90)"
+puts "  client = InvoiceMaster::ClaudeClient.new(image_processor: processor)"
+puts "  response = client.call('Hello, Claude!')"
+puts
+puts "Try out image processing:"
+puts "  img_path = '/path/to/your/image.jpg'"
+puts "  processor = InvoiceMaster::ImageProcessor.new"
+puts "  base64_data = processor.file_to_base64(img_path)"
+puts "  processor.base64_to_file(base64_data, 'output.jpg')"
+puts
+puts "Starting IRB..."
+puts
+
+IRB.start

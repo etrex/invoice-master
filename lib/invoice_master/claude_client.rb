@@ -17,7 +17,7 @@ module InvoiceMaster
       @system_prompt = system_prompt
       @max_tokens = max_tokens
       @api_endpoint = api_endpoint
-      @image_processor = image_processor || ImageProcessor.new(max_width: 1024, max_height: 1024, quality: 75)
+      @image_processor = image_processor || ImageProcessor.new(max_width: 1024, max_height: 1024, quality: 85)
     end
 
     def call(user_prompt)
@@ -58,8 +58,13 @@ module InvoiceMaster
       input_array.map do |item|
         case item
         when String
+          # 檢查字串是否為檔案路徑
+          if File.file?(item)
+            # 檔案路徑，使用 ImageProcessor 轉換為 base64
+            base64_data = @image_processor.file_to_base64(item)
+            format_base64_image(base64_data)
           # 檢查是否為 base64 編碼的圖片
-          if @image_processor.is_base64?(item)
+          elsif item.start_with?('data:image/') || (item =~ /^[A-Za-z0-9+\/]+={0,2}$/ && item.length > 100)
             format_base64_image(item)
           else
             # 一般文字
@@ -67,11 +72,11 @@ module InvoiceMaster
           end
         when ->(obj) { defined?(Vips::Image) && obj.is_a?(Vips::Image) }
           # 處理 Vips::Image 物件，使用 ImageProcessor 轉換為 base64
-          base64_data = @image_processor.vips_to_base64(item, quality: 75)
+          base64_data = @image_processor.vips_to_base64(item)
           format_base64_image(base64_data)
         else
           # 不支援的類型
-          raise Error, "Unsupported input type: #{item.class}. Only String, base64 encoded images, or Vips::Image are supported."
+          raise Error, "Unsupported input type: #{item.class}. Only String, file paths, base64 encoded images, or Vips::Image are supported."
         end
       end
     end
@@ -80,12 +85,21 @@ module InvoiceMaster
     # @param base64_data [String] Base64 編碼的圖片資料
     # @return [Hash] 格式化為 Claude API 所需的圖片物件
     def format_base64_image(base64_data)
+      # 移除可能的 data URI 前綴 (例如 "data:image/jpeg;base64,")
+      if base64_data.include?('base64,')
+        data = base64_data.split('base64,').last
+        media_type = base64_data[5..base64_data.index(';')-1]
+      else
+        data = base64_data
+        media_type = "image/jpeg"  # 預設為 JPEG
+      end
+
       {
         type: "image",
         source: {
           type: "base64",
-          media_type: "image/jpeg",
-          data: base64_data
+          media_type: media_type,
+          data: data
         }
       }
     end

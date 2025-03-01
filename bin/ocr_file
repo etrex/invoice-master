@@ -64,7 +64,7 @@ end
 # 設定預設的最大寬度和高度
 max_width = options[:max_width] || 1024
 max_height = options[:max_height] || 1024
-quality = options[:quality] || 90
+quality = options[:quality] || 85
 
 # 建立 ImageProcessor 和 OcrClient 實例
 image_processor = InvoiceMaster::ImageProcessor.new(
